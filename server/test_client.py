@@ -17,7 +17,7 @@ def test_handshake(method_name):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.connect((SERVER_IP, PORT))
 
-    # 1. INIT İsteği
+    # INIT İsteği
     req = {"type": "HANDSHAKE", "method": method_name, "step": "INIT"}
     s.sendall((json.dumps(req) + "\n").encode('utf-8'))
 
@@ -71,7 +71,7 @@ def test_handshake(method_name):
         aes_key = shared_secret[:16]
         finalize_payload = base64.b64encode(ciphertext).decode('utf-8')
 
-    # 2. FINALIZE İsteği
+    # FINALIZE İsteği
     finalize_req = {
         "type": "HANDSHAKE",
         "method": method_name,
@@ -82,7 +82,7 @@ def test_handshake(method_name):
     s.recv(1024)
 
     # 3. AES-128 Şifreli Mesaj Testi
-    gizli_mesaj = f"Tebrikler! {method_name} ve AES-128 ile sifreli iletisim basarili."
+    gizli_mesaj = f"{method_name} ve AES-128 ile sifreli iletisim basarili."
     enc_dict = engine.encrypt_aes(aes_key, gizli_mesaj)
     msg_packet = {"type": "TEXT", "mode": "ENCRYPTED", "payload": enc_dict}
     s.sendall((json.dumps(msg_packet) + "\n").encode('utf-8'))
