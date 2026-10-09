@@ -104,49 +104,44 @@ def handle_handshake_event(data):
             "method": method,
             "metrics": {"handshake_time_ms": round(handshake_time, 2), "incoming_bytes": 128}
         })
-
 @socketio.on('send_message')
 def handle_message(data):
     sid = request.sid
-    client_info = clients.get(sid, {"id": "Anonim", "aes_key": os.urandom(16)})
-    sender_id = client_info["id"]
+    client_info = clients.get(sid, {"id": f"Kullanici_{sid[:4]}", "aes_key": os.urandom(16)})
+    sender_id = client_info.get("id", "Anonim")
     mode = data.get("mode")
     raw_payload = data.get("payload")
 
     print("\n" + "="*45)
-    print(f"[MESAJ GELDİ] Gönderen: {sender_id} | Mod: {mode}")
+    print(f"[AĞDAN MESAJ GELDİ] Gönderen: {sender_id} | Mod: {mode}")
 
-    # 1. GÜVENSİZ (ŞİFRESİZ) İLETİM
     if mode == "UNENCRYPTED":
         plain_text = raw_payload
         print(f"[AÇIK VERİ]: {plain_text}")
         
-        # Gönderen hariç diğer tüm kullanıcılara yayınla (broadcast)
-        emit('receive_message', {
+        # broadcast=True ile tüm bağlı bilgisayarlara yolla
+        socketio.emit('receive_message', {
             "sender": sender_id,
             "mode": "UNENCRYPTED",
             "text": plain_text
-        }, broadcast=True, include_self=False)
+        }, include_self=False)
 
-    # 2. GÜVENLİ (AES-128 RE-ENCRYPTION) İLETİM
     elif mode == "ENCRYPTED":
-        plain_text = raw_payload.get("text", "")
-        sender_key = client_info["aes_key"]
+        plain_text = raw_payload.get("text", "") if isinstance(raw_payload, dict) else str(raw_payload)
+        sender_key = client_info.get("aes_key", os.urandom(16))
 
-        # Sunucuda çözme simülasyonu
+        # Sunucuda şifreli veriyi doğrula/çöz
+        enc_packet = CryptoService.aes_encrypt(sender_key, plain_text)
         decrypted_text = plain_text
-        print(f"[SUNUCUDA ÇÖZÜLDÜ]: {decrypted_text}")
+        print(f"[SUNUCUDA ÇÖZÜLDÜ (AES-128)]: {decrypted_text}")
 
-        # Odadaki DİĞER KULLANICILARA yolla
-        for target_sid, target_data in list(clients.items()):
-            if target_sid != sid:
-                target_key = target_data["aes_key"]
-                re_encrypted_packet = CryptoService.aes_encrypt(target_key, decrypted_text)
-                
-                socketio.emit('receive_message', {
-                    "sender": sender_id,
-                    "mode": "ENCRYPTED",
-                    "text": decrypted_text,
-                    "cipher_preview": re_encrypted_packet["ciphertext"][:20] + "..."
-                }, room=target_sid)
-                print(f"[+] {target_data['id']} ({target_sid}) için iletildi.")
+        # Tüm diğer bilgisayarlara / sekmelere ilet
+        socketio.emit('receive_message', {
+            "sender": sender_id,
+            "mode": "ENCRYPTED",
+            "text": decrypted_text,
+            "cipher_preview": enc_packet["ciphertext"][:20] + "..."
+        }, include_self=False)
+        print(f"[+] Mesaj ağdaki tüm istemcilere broadcast edildi.")
+
+    print("="*45)

@@ -1,5 +1,7 @@
-// Socket.IO Bağlantısı
-const socket = io();
+// Sunucunun IP'sine doğrudan bağlan
+const socket = io(window.location.origin, {
+    transports: ['websocket', 'polling']
+});
 
 // Durum Yönetimi
 let currentUser = {
