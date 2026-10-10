@@ -2,18 +2,14 @@ import os
 import sys
 import site
 sys.path.append(site.getusersitepackages())
-from Crypto.PublicKey import RSA
+from Crypto.PublicKey import RSA,ECC
 from Crypto.Cipher import PKCS1_OAEP, AES
 from Crypto.Util.Padding import pad, unpad
 from Crypto.Protocol.KDF import HKDF
 from Crypto.Hash import SHA256
-from Crypto.PublicKey import ECC
+from pqcrypto.kem import ml_kem_768
 
-try:
-    from pqcrypto.kem import kyber768
-except ImportError:
-    print("BURAYA GİRLDİ")
-    kyber768 = None
+
 class CryptoService:
 
     #AES
@@ -93,3 +89,17 @@ class CryptoService:
         aes_key = HKDF(shared_secret,16, b'',SHA256)
         return aes_key#private key + ecc public key = aes anahtarı
 
+
+    #kyber
+    @staticmethod
+    def generate_kyber_keypair():
+        public_key, secret_key = ml_kem_768.keygen()
+        return secret_key, public_key
+
+    @staticmethod
+    def kyber_encapsulate(public_key: bytes):
+        return ml_kem_768.encaps(public_key)
+
+    @staticmethod
+    def kyber_decapsulate(secret_key: bytes, ciphertext: bytes) -> bytes:
+        return ml_kem_768.decaps(secret_key, ciphertext)
