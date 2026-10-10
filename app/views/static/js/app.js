@@ -1,9 +1,8 @@
-// Sunucunun IP'sine doğrudan bağlan
-const socket = io(window.location.origin, {
-    transports: ['websocket', 'polling']
+// Sunucu bağlantısı (WebSocket ve Polling desteği)
+const socket = io({
+    transports: ['polling', 'websocket']
 });
 
-// Durum Yönetimi
 let currentUser = {
     username: "",
     room: "genel",
@@ -15,14 +14,12 @@ let currentHandshake = {
     status: "NOT_STARTED"
 };
 
-// SAYFA YÜKLENİNCE 
+// Sayfa Yüklendiğinde Dinleyicileri Ata
 window.addEventListener("DOMContentLoaded", () => {
     const inputMessage = document.getElementById("message-input");
     if (inputMessage) {
         inputMessage.addEventListener("keypress", (e) => {
-            if (e.key === "Enter") {
-                sendMessage();
-            }
+            if (e.key === "Enter") sendMessage();
         });
     }
 
@@ -43,15 +40,21 @@ window.addEventListener("DOMContentLoaded", () => {
     }
 });
 
-// SOCKET EVENT DİNLEYİCİLERİ 
+// Socket Olayları
 socket.on("connect", () => {
-    document.getElementById("connection-status").textContent = "Bağlandı (Çevrimiçi)";
-    document.getElementById("connection-status").style.color = "#10b981";
+    const status = document.getElementById("connection-status");
+    if (status) {
+        status.textContent = "Bağlandı (Çevrimiçi)";
+        status.style.color = "#22c55e";
+    }
 });
 
 socket.on("disconnect", () => {
-    document.getElementById("connection-status").textContent = "Bağlantı Kesildi";
-    document.getElementById("connection-status").style.color = "#ef4444";
+    const status = document.getElementById("connection-status");
+    if (status) {
+        status.textContent = "Bağlantı Kesildi";
+        status.style.color = "#ef4444";
+    }
 });
 
 socket.on("connection_response", (data) => {
@@ -60,12 +63,9 @@ socket.on("connection_response", (data) => {
     if (profileSid) profileSid.value = data.client_id;
 });
 
-// Sunucudan gelen el sıkışma yanıtı
 socket.on("handshake_response", (data) => {
     if (data.step === "SERVER_PUB") {
         appendSystemMessage(`[${data.method}] Sunucu Açık Anahtarı Alındı (${data.metrics.pub_size_bytes} byte). El sıkışma tamamlanıyor...`);
-        
-        // Client adımını finalize isteği ile sunucuya yolla
         socket.emit("handshake", {
             method: data.method,
             step: "FINALIZE",
@@ -78,12 +78,11 @@ socket.on("handshake_response", (data) => {
     }
 });
 
-// Gelen mesajları karşıla
 socket.on("receive_message", (data) => {
     renderIncomingMessage(data);
 });
 
-// GİRİŞ & ODA YÖNETİMİ 
+// Giriş ve Oda Yönetimi
 function joinChat() {
     const usernameInput = document.getElementById("username-input");
     const roomSelect = document.getElementById("room-select");
@@ -103,20 +102,23 @@ function joinChat() {
     document.getElementById("profile-username-input").value = username;
 
     document.getElementById("login-modal").style.display = "none";
-    updateOnlineList();
 
-    // Girişte varsayılan güvenli el sıkışmayı başlat
-    const selectedKey = document.getElementById("key-select").value;
-    initiateHandshake(selectedKey);
+    // Sunucuya odaya katıldığımızı bildir
+    socket.emit("join", {
+        username: currentUser.username,
+        room: currentUser.room
+    });
+
+    updateOnlineList();
+    initiateHandshake(document.getElementById("key-select").value);
 }
 
 function updateOnlineList() {
     const list = document.getElementById("online-users-list");
-    list.innerHTML = `<li><i class="fa-solid fa-circle" style="color: #10b981; font-size: 8px;"></i> ${currentUser.username} (Sen)</li>`;
+    list.innerHTML = `<li><i class="fa-solid fa-circle" style="color: #22c55e; font-size: 8px;"></i> ${escapeHtml(currentUser.username)} (Sen)</li>`;
     document.getElementById("user-count").textContent = "1";
 }
 
-//  EL SIKIŞMA (HANDSHAKE)
 function initiateHandshake(method) {
     appendSystemMessage(`[!] ${method} El Sıkışması Başlatılıyor...`);
     socket.emit("handshake", {
@@ -125,13 +127,13 @@ function initiateHandshake(method) {
     });
 }
 
-//  MESAJ GÖNDERME & LİSTELEME 
+// Mesaj Gönderme ve Listeleme (style.css sınıflarına uygun)
 function sendMessage() {
     const messageInput = document.getElementById("message-input");
     const text = messageInput.value.trim();
     if (!text) return;
 
-    const mode = document.getElementById("mode-select").value; // 'GUVENLI' veya 'GUVENSIZ'
+    const mode = document.getElementById("mode-select").value;
     const keyMethod = document.getElementById("key-select").value;
 
     if (mode === "GUVENSIZ") {
@@ -139,34 +141,30 @@ function sendMessage() {
             mode: "UNENCRYPTED",
             payload: text
         });
-        renderMyMessage(text, "Açık Metin (Şifresiz)", "#6b7280");
+        renderMyMessage(text, "Açık Metin");
     } else {
         socket.emit("send_message", {
             mode: "ENCRYPTED",
-            payload: {
-                text: text
-            }
+            payload: { text: text }
         });
-        renderMyMessage(text, `${keyMethod} + AES-128`, "#10b981");
+        renderMyMessage(text, `${keyMethod} + AES-128`);
     }
 
     messageInput.value = "";
 }
-function renderMyMessage(text, metaText, badgeColor) {
+
+function renderMyMessage(text, tagText) {
     const container = document.getElementById("messages-container");
     const msgDiv = document.createElement("div");
-    msgDiv.style.margin = "8px 0";
-    msgDiv.style.display = "flex";
-    msgDiv.style.flexDirection = "column";
-    msgDiv.style.alignItems = "flex-end";
+    msgDiv.className = "message-bubble out";
 
     msgDiv.innerHTML = `
-        <div style="background: #2563eb; color: #fff; padding: 10px 14px; border-radius: 12px 12px 2px 12px; max-width: 70%; word-break: break-word;">
-            ${escapeHtml(text)}
+        <span class="msg-sender">Sen</span>
+        ${escapeHtml(text)}
+        <div class="msg-meta">
+            <span class="crypto-tag">${tagText}</span>
+            ${getCurrentTime()}
         </div>
-        <small style="color: ${badgeColor}; font-size: 11px; margin-top: 3px;">
-            <i class="fa-solid fa-lock"></i> ${metaText} • Sen
-        </small>
     `;
     container.appendChild(msgDiv);
     container.scrollTop = container.scrollHeight;
@@ -175,22 +173,18 @@ function renderMyMessage(text, metaText, badgeColor) {
 function renderIncomingMessage(data) {
     const container = document.getElementById("messages-container");
     const msgDiv = document.createElement("div");
-    msgDiv.style.margin = "8px 0";
-    msgDiv.style.display = "flex";
-    msgDiv.style.flexDirection = "column";
-    msgDiv.style.alignItems = "flex-start";
+    msgDiv.className = "message-bubble in";
 
     const isEncrypted = data.mode === "ENCRYPTED";
-    const badgeText = isEncrypted ? `AES-128 Çözüldü (Re-encrypted: ${data.cipher_preview})` : "Açık Metin (Güvensiz)";
-    const badgeColor = isEncrypted ? "#10b981" : "#ef4444";
+    const tagText = isEncrypted ? `AES-128 (${data.cipher_preview || 'Şifreli'})` : "Açık Metin";
 
     msgDiv.innerHTML = `
-        <div style="background: #1e293b; color: #f8fafc; padding: 10px 14px; border-radius: 12px 12px 12px 2px; max-width: 70%; word-break: break-word; border: 1px solid #334155;">
-            ${escapeHtml(data.text)}
+        <span class="msg-sender">${escapeHtml(data.sender)}</span>
+        ${escapeHtml(data.text)}
+        <div class="msg-meta">
+            <span class="crypto-tag">${tagText}</span>
+            ${getCurrentTime()}
         </div>
-        <small style="color: ${badgeColor}; font-size: 11px; margin-top: 3px;">
-            <i class="fa-solid fa-shield"></i> ${badgeText} • ${data.sender}
-        </small>
     `;
     container.appendChild(msgDiv);
     container.scrollTop = container.scrollHeight;
@@ -200,14 +194,17 @@ function appendSystemMessage(text) {
     const container = document.getElementById("messages-container");
     const sysDiv = document.createElement("div");
     sysDiv.className = "system-message";
-    sysDiv.style.textAlign = "center";
-    sysDiv.style.margin = "8px 0";
-    sysDiv.innerHTML = `<span style="background: #334155; color: #94a3b8; font-size: 12px; padding: 4px 10px; border-radius: 6px;">${escapeHtml(text)}</span>`;
+    sysDiv.innerHTML = `<span>${escapeHtml(text)}</span>`;
     container.appendChild(sysDiv);
     container.scrollTop = container.scrollHeight;
 }
 
-//  MODAL & DİĞER FONKSİYONLAR
+function getCurrentTime() {
+    const now = new Date();
+    return now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+}
+
+// Modal ve Arama Fonksiyonları
 function openProfileModal() {
     document.getElementById("profile-modal").style.display = "flex";
 }
@@ -230,12 +227,12 @@ function clearChatHistory() {
 
 function filterMessages() {
     const query = document.getElementById("chat-search-input").value.toLowerCase();
-    const messages = document.querySelectorAll("#messages-container > div");
-    messages.forEach(msg => {
-        if (msg.textContent.toLowerCase().includes(query)) {
-            msg.style.display = "";
+    const bubbles = document.querySelectorAll(".message-bubble");
+    bubbles.forEach(bubble => {
+        if (bubble.textContent.toLowerCase().includes(query)) {
+            bubble.classList.remove("hidden-search");
         } else {
-            msg.style.display = "none";
+            bubble.classList.add("hidden-search");
         }
     });
 }
