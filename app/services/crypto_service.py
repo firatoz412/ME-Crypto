@@ -1,6 +1,8 @@
 import os
 import sys
 import site
+import time
+import base64
 sys.path.append(site.getusersitepackages())
 from Crypto.PublicKey import RSA,ECC
 from Crypto.Cipher import PKCS1_OAEP, AES
@@ -18,10 +20,16 @@ class CryptoService:
         return os.urandom(16)#16 byte (128 bit) rastgele anahtar üret
 
     @staticmethod
-    def aes_encrypt(key:bytes,plaintext:bytes) -> bytes:
+    def aes_encrypt(key:bytes,plaintext:str) -> dict:
+        if isinstance(plaintext,str):
+            plaintext = plaintext.encode('utf-8')
         cipher = AES.new(key,AES.MODE_CBC)
         ciphertext = cipher.encrypt(pad(plaintext,AES.block_size))
-        return cipher.iv + ciphertext#AES-128-CBC ile veriyi şifrele. sonra iv(16 byte) + şifreli metini döndür
+        return {
+            "iv": base64.b64encode(cipher.iv).decode('utf-8'),
+            "ciphertext": base64.b64encode(ciphertext).decode('utf-8'),
+            "raw": cipher.iv + ciphertext
+        }
 
     @staticmethod
     def aes_decrypt(key:bytes,encrypted_payload:bytes) -> bytes:
@@ -32,9 +40,13 @@ class CryptoService:
         
     #RSA-2048
     @staticmethod
-    def generate_rsa_keypair():#private key,public key
+    def generate_rsa_keypair():#private key,public key,generator time,public key size
+        start_time = time.perf_counter()
         key = RSA.generate(2048)
-        return key,key.public_key()
+        pub_pem = key.publickey().export_key().decode('utf-8')
+        gen_time = (time.perf_counter() - start_time)*1000
+        pub_size = len(pub_pem.encode('utf-8'))
+        return key,pub_pem,gen_time,pub_size
 
     @staticmethod
     def rsa_encrypt_aes_key(public_key,aes_key:bytes) -> bytes:
@@ -61,11 +73,15 @@ class CryptoService:
     )#16'lık tabanda güvenli asal sayı
     DH_G = 2#generator
 
-    @classmethod
+    @classmethod#priv, pub_hex, gen_time, pub_size 
     def generate_dh_keypair(cls):
+        start_time = time.perf_counter()
         private_key = int.from_bytes(os.urandom(32), byteorder='big')#256 bit
         public_key = pow(cls.DH_G, private_key, cls.DH_P)#public_key
-        return private_key, public_key
+        pub_hex = hex(public_key)[2:]
+        gen_time = (time.perf_counter() - start_time) * 1000
+        pub_size = len(pub_hex.encode('utf-8'))
+        return private_key,pub_hex,gen_time,pub_size
 
     @classmethod
     def dh_shared_key(cls, private_key: int, public_key: int) -> bytes:
@@ -78,9 +94,13 @@ class CryptoService:
     #ecc/edhc
     @staticmethod
     def generate_ecc_keypair():
+        start_time = time.perf_counter()
         private_key = ECC.generate(curve='P-256')
         public_key  = private_key.public_key()
-        return private_key,public_key#ecc anahtar çifti
+        pub_pem = public_key.export_key(format='PEM').decode('utf-8')
+        gen_time = (time.perf_counter() - start_time)*1000
+        pub_size = len(pub_pem.encode('utf-8'))
+        return private_key,pub_pem,gen_time,pub_size
 
     @staticmethod
     def ecc_shared_key(private_key,public_key) -> bytes:
@@ -91,10 +111,14 @@ class CryptoService:
 
 
     #kyber
-    @staticmethod
+    @staticmethod#priv, pub_b64, gen_time, pub_size
     def generate_kyber_keypair():
-        public_key, secret_key = ml_kem_768.keygen()
-        return secret_key, public_key
+        start_time = time.perf_counter()
+        public_key, private_key = ml_kem_768.keygen()#public,secret
+        pub_b64 = base64.b64encode(public_key).decode('utf-8')
+        gen_time = (time.perf_counter() - start_time)*1000
+        pub_size = len(pub_b64.encode('utf-8'))
+        return private_key,pub_b64,gen_time,pub_size
 
     @staticmethod
     def kyber_encapsulate(public_key: bytes):
