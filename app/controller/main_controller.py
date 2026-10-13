@@ -139,7 +139,7 @@ def handle_message(data):
         socketio.emit('receive_message', {
             "sender": sender_id,
             "mode": "ENCRYPTED",
-            "text": decrypted_text,
+            "text": enc_packet["ciphertext"],
             "cipher_preview": enc_packet["ciphertext"][:20] + "..."
         }, include_self=False)
         print(f"[+] Mesaj ağdaki tüm istemcilere broadcast edildi.")
