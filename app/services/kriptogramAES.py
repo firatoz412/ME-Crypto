@@ -181,5 +181,38 @@ class KriptogramAES:
         state = cls._add_round_key(state, round_keys[0])
         return bytes(state)
     
+    
+    @staticmethod
+    def pad(data: bytes) -> bytes:
+        
+        if not isinstance(data,bytes):
+            raise TypeError("data byte tipinde olmalı")
+        
+        block_size = 16
+        padding_len = block_size - (len(data)%16)#doldurulacak padding boyutu hesabı
+        padding =  bytes([[padding_len]*padding_len])#Örnek: data = 10,padding lentgh(pl) = 6 -> return data + [pl]*pl -> return data + [pl,pl,pl,pl,pl,pl] -> dataplplplplplpl
+        
+        return data + padding
+    
+    
+    @staticmethod
+    def unpad(data:bytes) -> bytes:
+        
+        if not data or len(data) % 16 != 0:
+            raise ValueError("geçersiz ")
+        
+        padding_len = data[-1]
+        
+        if len(data) < 1 or len(data) > 16:
+            raise ValueError("geçersiz padding uzunluğu")
+        
+        if data[-padding_len:] != bytes([padding_len]) * padding_len:
+            raise ValueError("geçersiz padding")
+        
+        return data[:-padding_len]
+    
+    
+        
+    
        
        
