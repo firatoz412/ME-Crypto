@@ -126,6 +126,7 @@ class KriptogramAES:
 
     @classmethod
     def expand_key(cls, master_key: bytes):
+        cls.check_key(master_key)
         key_words = [list(master_key[i:i+4]) for i in range(0, 16, 4)]
         for i in range(4, 44):
             temp = list(key_words[i-1])
@@ -144,9 +145,25 @@ class KriptogramAES:
                 r_key.extend(key_words[r * 4 + c])
             round_keys.append(r_key)
         return round_keys
+    
+    @staticmethod
+    def check_key(key):
+        if not isinstance(key, (bytes, bytearray)):
+            raise TypeError("anahtar bytes tipinde olmalı")
+        if len(key) != 16:
+            raise ValueError("AES-128 anahtarı 16 byte olmalı")
+
+    @staticmethod
+    def check_block(block):
+        if not isinstance(block, (bytes, bytearray)):
+            raise TypeError("blok bytes tipinde olmalı")
+        if len(block) != 16:
+            raise ValueError("blok 16 bayt olmalı")
 
     @classmethod
     def encrypt_block(cls, plaintext_block: bytes, key: bytes) -> bytes:
+        cls.check_block(plaintext_block)
+        cls.check_key(key)
         state = list(plaintext_block)
         round_keys = cls.expand_key(key)
         
@@ -165,6 +182,8 @@ class KriptogramAES:
 
     @classmethod
     def decrypt_block(cls, ciphertext_block: bytes, key: bytes) -> bytes:
+        cls.check_block(ciphertext_block)
+        cls.check_key(key)
         state = list(ciphertext_block)
         round_keys = cls.expand_key(key)
         
@@ -190,7 +209,7 @@ class KriptogramAES:
         
         block_size = 16
         padding_len = block_size - (len(data)%16)#doldurulacak padding boyutu hesabı
-        padding =  bytes([[padding_len]*padding_len])#Örnek: data = 10,padding lentgh(pl) = 6 -> return data + [pl]*pl -> return data + [pl,pl,pl,pl,pl,pl] -> dataplplplplplpl
+        padding =  bytes([padding_len]*padding_len)#Örnek: data = 10,padding lentgh(pl) = 6 -> return data + [pl]*pl -> return data + [pl,pl,pl,pl,pl,pl] -> dataplplplplplpl
         
         return data + padding
     
@@ -203,13 +222,52 @@ class KriptogramAES:
         
         padding_len = data[-1]
         
-        if len(data) < 1 or len(data) > 16:
+        if padding_len < 1 or padding_len > 16:
             raise ValueError("geçersiz padding uzunluğu")
         
         if data[-padding_len:] != bytes([padding_len]) * padding_len:
             raise ValueError("geçersiz padding")
         
         return data[:-padding_len]
+    
+    
+    @classmethod
+    def encrypt_text(cls,plaintext:str,key:bytes) -> bytes:
+        
+        if not isinstance(plaintext,str):
+            raise TypeError("plaintext string tipinde olmalı.")
+        
+        raw_bytes = plaintext.encode("utf-8")
+        padded_data = cls.pad(raw_bytes)
+        encrypted_ciphertext = bytearray()
+        
+        for i in range(0,len(padded_data),16):
+            block = padded_data[i:i+16]#sadece 16 lık bloklar halinde alıyoruz.
+            encrypted_block = cls.encrypt_block(block,key)
+            encrypted_ciphertext.extend(encrypted_block)
+        
+        return bytes(encrypted_ciphertext)
+    
+    
+    @classmethod
+    def decrypt_text(cls,ciphertext_block:bytes,key:bytes) -> str:
+        
+        if not isinstance(ciphertext_block, (bytes, bytearray)):
+            raise TypeError("şifreli veri bytes tipinde olmalı")
+        
+        if not ciphertext_block or len(ciphertext_block) % 16 != 0:
+            raise ValueError("şifreli veri uzunluğu 16'nın katı olmalı")
+        cls.check_key(key)
+        
+        decrypted_plaintext = bytearray()
+        
+        for i in range(0,len(ciphertext_block),16):
+            block = ciphertext_block[i:i+16]
+            decrypted_block = cls.decrypt_block(block,key)
+            decrypted_plaintext.extend(decrypted_block)
+        
+        unpadded_data = cls.unpad(bytes(decrypted_plaintext))
+        return unpadded_data.decode("utf-8")
     
     
         
