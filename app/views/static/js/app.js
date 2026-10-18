@@ -18,8 +18,11 @@ let clientSession = {
     aes_key: "KriptoGRAM_Default_AES_Secret_Key_128"
 };
 
+let currentAuthMode = "login"; // 'login' veya 'register'
+
 // Sayfa Yüklendiğinde Dinleyicileri Ata
 window.addEventListener("DOMContentLoaded", () => {
+    // Sohbet mesaj kutusunda Enter dinleyicisi
     const inputMessage = document.getElementById("message-input");
     if (inputMessage) {
         inputMessage.addEventListener("keypress", (e) => {
@@ -27,6 +30,15 @@ window.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    // Giriş modalındaki şifre kutusunda Enter ile o anki sekmeye göre işlem yapma
+    const passwordInput = document.getElementById("password-input");
+    if (passwordInput) {
+        passwordInput.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") handleAuthSubmit();
+        });
+    }
+
+    // Dosya / Resim / PDF seçiciyi bağla
     let fileInput = document.getElementById("file-input");
     if (!fileInput) {
         fileInput = document.createElement("input");
@@ -119,45 +131,177 @@ socket.on("receive_message", (data) => {
     renderIncomingMessage(data);
 });
 
-// Giriş ve Oda Yönetimi
-function joinChat() {
-    const usernameInput = document.getElementById("username-input");
+// =================== AUTH (GİRİŞ & KAYIT) İŞLEMLERİ ===================
+
+function switchAuthTab(mode) {
+    currentAuthMode = mode;
+    clearAuthMessages();
+    
+    const loginTab = document.getElementById("tab-login-btn");
+    const registerTab = document.getElementById("tab-register-btn");
+    const mainBtn = document.getElementById("auth-main-btn");
+
+    if (mode === "login") {
+        if (loginTab) {
+            loginTab.style.color = "#38bdf8";
+            loginTab.style.borderBottom = "2px solid #38bdf8";
+        }
+        if (registerTab) {
+            registerTab.style.color = "#94a3b8";
+            registerTab.style.borderBottom = "2px solid transparent";
+        }
+        if (mainBtn) mainBtn.textContent = "Giriş Yap";
+    } else {
+        if (registerTab) {
+            registerTab.style.color = "#38bdf8";
+            registerTab.style.borderBottom = "2px solid #38bdf8";
+        }
+        if (loginTab) {
+            loginTab.style.color = "#94a3b8";
+            loginTab.style.borderBottom = "2px solid transparent";
+        }
+        if (mainBtn) mainBtn.textContent = "Kayıt Ol ve Giriş Yap";
+    }
+}
+
+function togglePasswordVisibility() {
+    const pwd = document.getElementById("password-input");
+    const icon = document.getElementById("toggle-password");
+    if (!pwd || !icon) return;
+
+    if (pwd.type === "password") {
+        pwd.type = "text";
+        icon.classList.remove("fa-eye-slash");
+        icon.classList.add("fa-eye");
+    } else {
+        pwd.type = "password";
+        icon.classList.remove("fa-eye");
+        icon.classList.add("fa-eye-slash");
+    }
+}
+
+async function handleAuthSubmit() {
+    if (currentAuthMode === "login") {
+        await handleLogin();
+    } else {
+        await handleRegisterAndLogin();
+    }
+}
+
+async function handleLogin() {
+    const username = document.getElementById("username-input")?.value.trim();
+    const password = document.getElementById("password-input")?.value.trim();
     const roomSelect = document.getElementById("room-select");
 
-    const username = usernameInput ? usernameInput.value.trim() : "";
-    if (!username) {
-        alert("Lütfen bir kullanıcı adı girin!");
+    clearAuthMessages();
+
+    if (!username || !password) {
+        showAuthMessage("Lütfen kullanıcı adı ve şifre girin!", "error");
         return;
     }
 
-    currentUser.username = username;
-    currentUser.room = roomSelect ? roomSelect.value : "genel";
+    try {
+        const res = await fetch("/api/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
 
-    const displayUser = document.getElementById("display-username");
-    if (displayUser) displayUser.textContent = username;
+        if (data.success) {
+            currentUser.username = username;
+            currentUser.room = roomSelect ? roomSelect.value : "genel";
 
-    const avatar = document.getElementById("my-avatar");
-    if (avatar) avatar.textContent = username.charAt(0).toUpperCase();
+            const displayUser = document.getElementById("display-username");
+            if (displayUser) displayUser.textContent = username;
 
-    const roomBadge = document.getElementById("current-room-badge");
-    if (roomBadge && roomSelect) roomBadge.textContent = roomSelect.options[roomSelect.selectedIndex].text;
+            const avatar = document.getElementById("my-avatar");
+            if (avatar) avatar.textContent = username.charAt(0).toUpperCase();
 
-    const profInput = document.getElementById("profile-username-input");
-    if (profInput) profInput.value = username;
+            const roomBadge = document.getElementById("current-room-badge");
+            if (roomBadge && roomSelect) roomBadge.textContent = roomSelect.options[roomSelect.selectedIndex].text;
 
-    const modal = document.getElementById("login-modal");
-    if (modal) modal.style.display = "none";
+            const profInput = document.getElementById("profile-username-input");
+            if (profInput) profInput.value = username;
 
-    socket.emit("join", {
-        username: currentUser.username,
-        room: currentUser.room
-    });
+            // Modalı gizle
+            const modal = document.getElementById("login-modal");
+            if (modal) modal.style.display = "none";
 
-    updateOnlineList([currentUser.username]);
-    
-    const keySel = document.getElementById("key-select");
-    initiateHandshake(keySel ? keySel.value : "KYBER");
+            // Odaya katıl ve soket bildirimi gönder
+            socket.emit("join", {
+                username: currentUser.username,
+                room: currentUser.room
+            });
+
+            updateOnlineList([currentUser.username]);
+
+            // Güvenli anahtar el sıkışmasını başlat
+            const keySel = document.getElementById("key-select");
+            initiateHandshake(keySel ? keySel.value : "KYBER");
+        } else {
+            showAuthMessage(data.message || "Giriş başarısız!", "error");
+        }
+    } catch (err) {
+        showAuthMessage("Sunucuya bağlanılamadı!", "error");
+    }
 }
+
+// Kayıt Ol + Başarılı olursa otomatik giriş yap
+async function handleRegisterAndLogin() {
+    const username = document.getElementById("username-input")?.value.trim();
+    const password = document.getElementById("password-input")?.value.trim();
+
+    clearAuthMessages();
+
+    if (!username || !password) {
+        showAuthMessage("Kayıt için kullanıcı adı ve şifre giriniz!", "error");
+        return;
+    }
+
+    try {
+        const res = await fetch("/api/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            showAuthMessage("Hesap oluşturuldu, odaya bağlanılıyor...", "success");
+            // Kullanıcıyı bekletmeden otomatik içeri al
+            setTimeout(() => {
+                handleLogin();
+            }, 600);
+        } else {
+            showAuthMessage(data.message || "Kayıt başarısız!", "error");
+        }
+    } catch (err) {
+        showAuthMessage("Sunucuya bağlanılamadı!", "error");
+    }
+}
+
+function showAuthMessage(msg, type) {
+    const errBox = document.getElementById("auth-error-msg");
+    const succBox = document.getElementById("auth-success-msg");
+
+    if (type === "error" && errBox) {
+        errBox.textContent = msg;
+        errBox.style.display = "block";
+    } else if (type === "success" && succBox) {
+        succBox.textContent = msg;
+        succBox.style.display = "block";
+    }
+}
+
+function clearAuthMessages() {
+    const errBox = document.getElementById("auth-error-msg");
+    const succBox = document.getElementById("auth-success-msg");
+    if (errBox) errBox.style.display = "none";
+    if (succBox) succBox.style.display = "none";
+}
+
+// =================== ODA VE KULLANICI LİSTESİ ===================
 
 function updateOnlineList(users) {
     const list = document.getElementById("online-users-list");
@@ -187,7 +331,7 @@ function initiateHandshake(method) {
     });
 }
 
-// Dosyanın resim olup olmadığını hem MIME hem uzantıdan kontrol eden fonksiyon
+// Dosyanın resim olup olmadığını kontrol eden fonksiyon
 function checkIfImage(fileName, fileType = "") {
     if (fileType && fileType.startsWith("image/")) return true;
     const lowerName = fileName.toLowerCase();
@@ -198,7 +342,8 @@ function checkIfImage(fileName, fileType = "") {
            lowerName.endsWith(".webp");
 }
 
-// Mesaj Gönderme
+// =================== MESAJLAŞMA & DOSYA GÖNDERİMİ ===================
+
 function sendMessage() {
     const messageInput = document.getElementById("message-input");
     const text = messageInput.value.trim();
@@ -226,7 +371,6 @@ function sendMessage() {
     messageInput.value = "";
 }
 
-// Resim ve PDF Gönderme
 function handleFileUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -291,7 +435,6 @@ function renderMyMessage(text, tagText) {
     container.scrollTop = container.scrollHeight;
 }
 
-// Kendi gönderdiğimiz Resim veya PDF balonu
 function renderMyMedia(fileName, base64Data, isImage, tagText) {
     const container = document.getElementById("messages-container");
     if (!container) return;
@@ -351,13 +494,11 @@ function renderIncomingMessage(data) {
         }
     }
 
-    // Gelen içerik bir dosya mı kontrolü
     let fileInfo = null;
     try {
         const parsed = JSON.parse(displayText);
         if (parsed && parsed.is_file) {
             fileInfo = parsed;
-            // Alıcı tarafta da resim olup olmadığını garantiye al
             if (fileInfo.is_image === undefined) {
                 fileInfo.is_image = checkIfImage(fileInfo.file_name);
             }
@@ -410,6 +551,8 @@ function renderIncomingMessage(data) {
     container.appendChild(msgDiv);
     container.scrollTop = container.scrollHeight;
 }
+
+// =================== YARDIMCI VE ARAYÜZ FONKSİYONLARI ===================
 
 function appendSystemMessage(text) {
     const container = document.getElementById("messages-container");

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ana Sayfa</title>
+    <title>KriptoGRAM - Güvenli Mesajlaşma</title>
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
@@ -13,27 +13,47 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"></script>
 </head>
 <body>
-    <div id="login-modal" class="modal-overlay">
-        <div class="modal-card">
-            <div class="modal-header">
-                <i class="fa-solid fa-shield-halved"></i>
-                <h2>ME-Crypto'ya Katıl</h2>
+<!-- GİRİŞ & KAYIT MODALI -->
+<div id="login-modal" class="modal-overlay" style="display: flex;">
+    <div class="modal-card">
+        <div class="modal-header">
+            <i class="fa-solid fa-shield-halved"></i>
+            <h2>KriptoGRAM</h2>
+        </div>
+
+        <!-- Giriş / Kayıt Sekmeleri -->
+        <div style="display: flex; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 15px;">
+            <button id="tab-login-btn" onclick="switchAuthTab('login')" style="flex: 1; padding: 10px; background: transparent; border: none; border-bottom: 2px solid #38bdf8; color: #38bdf8; font-weight: bold; cursor: pointer;">Giriş Yap</button>
+            <button id="tab-register-btn" onclick="switchAuthTab('register')" style="flex: 1; padding: 10px; background: transparent; border: none; border-bottom: 2px solid transparent; color: #94a3b8; font-weight: bold; cursor: pointer;">Kayıt Ol</button>
+        </div>
+
+        <div class="modal-body">
+            <label for="username-input">Kullanıcı Adı</label>
+            <input type="text" id="username-input" placeholder="Örn: ahmet_crypto" maxlength="20" autocomplete="off">
+            
+            <label for="password-input">Şifre</label>
+            <div style="position: relative;">
+                <input type="password" id="password-input" placeholder="••••••••" maxlength="32" autocomplete="off" style="width: 100%; box-sizing: border-box; padding-right: 35px;">
+                <i id="toggle-password" class="fa-solid fa-eye-slash" onclick="togglePasswordVisibility()" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; color: #94a3b8; font-size: 14px;"></i>
             </div>
-            <div class="modal-body">
-                <label for="username-input">Kullanıcı Adı</label>
-                <input type="text" id="username-input" placeholder="Örn: ahmet_crypto" maxlength="20">
-                
-                <label for="room-select">Katılınacak Oda</label>
-                <select id="room-select">
-                    <option value="genel">Genel Sohbet Odası</option>
-                    <option value="kripto-lab">Kriptoloji Odası</option>
-                    <option value="ozel-1">Özel Tünel</option>
-                </select>
-            </div>
-            <button id="btn-login" onclick="joinChat()">Sohbete Başla</button>
+
+            <label for="room-select">Katılınacak Oda</label>
+            <select id="room-select">
+                <option value="genel">Genel Sohbet Odası</option>
+                <option value="kripto-lab">Kriptoloji Odası</option>
+                <option value="ozel-1">Özel Tünel</option>
+            </select>
+
+            <div id="auth-error-msg" style="display: none; color: #ef4444; font-size: 12px; margin-top: 8px;"></div>
+            <div id="auth-success-msg" style="display: none; color: #22c55e; font-size: 12px; margin-top: 8px;"></div>
+        </div>
+
+        <!-- Tek Dinamik Aksiyon Butonu -->
+        <div style="width: 100%; margin-top: 10px;">
+            <button id="auth-main-btn" onclick="handleAuthSubmit()" style="width: 100%; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer;">Giriş Yap</button>
         </div>
     </div>
-
+</div>
     <!-- Ayarlar Modalı -->
     <div id="profile-modal" class="modal-overlay" style="display: none;">
         <div class="modal-card">
@@ -46,7 +66,7 @@
                 <input type="text" id="profile-username-input" value="" readonly style="opacity: 0.7;">
                 
                 <label>İstemci Kimliği (Session ID)</label>
-                <input type="text" id="profile-session-id" value="Sess_982a7f11" readonly style="opacity: 0.5;">
+                <input type="text" id="profile-session-id" value="" readonly style="opacity: 0.5;">
 
                 <label>Varsayılan Anahtar Tipi</label>
                 <select id="profile-default-key">
@@ -61,9 +81,9 @@
         </div>
     </div>
 
-    <!-- Uygulama ana ekranı-->
+    <!-- Uygulama Ana Ekranı -->
     <div class="app-container">
-        <!-- Sol bar -->
+        <!-- Sol Bar -->
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div class="user-profile">
@@ -80,7 +100,7 @@
 
             <div class="sidebar-section">
                 <h3><i class="fa-solid fa-door-open"></i> Aktif Oda</h3>
-                <div class="room-badge" id="current-room-badge">Genel Sohbet</div>
+                <div class="room-badge" id="current-room-badge">Genel Sohbet Odası</div>
             </div>
 
             <div class="sidebar-section list-section">
@@ -89,7 +109,7 @@
             </div>
         </aside>
 
-        <!-- Chat alanı -->
+        <!-- Chat Alanı -->
         <main class="chat-area">
             <header class="chat-header">
                 <div class="chat-title-group">
@@ -136,13 +156,13 @@
                 </div>
             </div>
 
-            <!-- Mesaj input alanı -->
+            <!-- Mesaj ve Dosya Input Alanı -->
             <footer class="chat-input-area">
                 <div class="input-wrapper">
-                    <label for="file-input" class="btn-attach" title="PDF / Dosya Gönder">
+                    <label for="file-input" class="btn-attach" title="PDF / Resim Gönder">
                         <i class="fa-solid fa-paperclip"></i>
                     </label>
-                    <input type="file" id="file-input" accept=".pdf,.doc,.docx,.png,.jpg" style="display: none;">
+                    <input type="file" id="file-input" accept="image/*,application/pdf" style="display: none;">
 
                     <input type="text" id="message-input" placeholder="Mesajınızı yazın..." autocomplete="off">
                     
@@ -154,7 +174,7 @@
         </main>
     </div>
 
-    <!-- Uygulama scripti tüm DOM ve kütüphaneler yüklendikten sonra en altta çalıştırılır -->
+    <!-- Uygulama Scripti -->
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>
