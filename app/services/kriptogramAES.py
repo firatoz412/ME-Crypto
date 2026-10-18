@@ -161,11 +161,14 @@ class KriptogramAES:
             raise ValueError("blok 16 bayt olmalı")
 
     @classmethod
-    def encrypt_block(cls, plaintext_block: bytes, key: bytes) -> bytes:
+    def encrypt_block(cls, plaintext_block: bytes, key: bytes,round_keys=None) -> bytes:
         cls.check_block(plaintext_block)
         cls.check_key(key)
         state = list(plaintext_block)
         round_keys = cls.expand_key(key)
+    
+        if round_keys is None:
+            round_keys = cls.expand_key(key)
         
         state = cls._add_round_key(state, round_keys[0])
         
@@ -181,11 +184,15 @@ class KriptogramAES:
         return bytes(state)
 
     @classmethod
-    def decrypt_block(cls, ciphertext_block: bytes, key: bytes) -> bytes:
+    def decrypt_block(cls, ciphertext_block: bytes, key: bytes,round_keys=None) -> bytes:
+        
         cls.check_block(ciphertext_block)
         cls.check_key(key)
         state = list(ciphertext_block)
         round_keys = cls.expand_key(key)
+        
+        if round_keys is None:
+            round_keys = cls.expand_key(key)
         
         state = cls._add_round_key(state, round_keys[10])
         state = cls.inv_shift_rows(state)
@@ -231,22 +238,62 @@ class KriptogramAES:
         return data[:-padding_len]
     
     
+    #CBC:dönene değer = iv(16 bayt) + ciphertext
+    @classmethod
+    def encrypt_cbc(cls, data: bytes, key: bytes, iv: bytes = None) -> bytes:
+        
+        if not isinstance(data, (bytes, bytearray)):
+            raise TypeError("data bytes tipinde olmalı")
+        
+        if iv is None:
+            import os
+            iv = os.urandom(16)
+            
+        cls.check_block(iv)
+        round_keys = cls.expand_key(key)
+        padded = cls.pad(bytes(data))
+        prev, out = bytes(iv), bytearray()
+        
+        for i in range(0, len(padded), 16):
+            block = bytes(a ^ b for a, b in zip(padded[i:i + 16], prev))
+            prev = cls.encrypt_block(block, key, round_keys)
+            out.extend(prev)
+            
+        return bytes(iv) + bytes(out)
+    
+    
+    
+ 
+    @classmethod
+    def decrypt_cbc(cls, payload: bytes, key: bytes) -> bytes:
+        
+        if not isinstance(payload, (bytes, bytearray)):
+            raise TypeError("payload bytes tipinde olmalı")
+        
+        if len(payload) < 32 or len(payload) % 16 != 0:
+            raise ValueError("payload = iv(16) + ciphertext(16'nın katı) olmalı")
+        
+        iv, ct = bytes(payload[:16]), bytes(payload[16:])
+        round_keys = cls.expand_key(key)
+        prev, out = iv, bytearray()
+        
+        for i in range(0, len(ct), 16):
+            c = ct[i:i + 16]
+            d = cls.decrypt_block(c, key, round_keys)
+            out.extend(a ^ b for a, b in zip(d, prev))
+            prev = c
+            
+        return cls.unpad(bytes(out))
+    
+    
+    
     @classmethod
     def encrypt_text(cls,plaintext:str,key:bytes) -> bytes:
         
         if not isinstance(plaintext,str):
             raise TypeError("plaintext string tipinde olmalı.")
         
-        raw_bytes = plaintext.encode("utf-8")
-        padded_data = cls.pad(raw_bytes)
-        encrypted_ciphertext = bytearray()
-        
-        for i in range(0,len(padded_data),16):
-            block = padded_data[i:i+16]#sadece 16 lık bloklar halinde alıyoruz.
-            encrypted_block = cls.encrypt_block(block,key)
-            encrypted_ciphertext.extend(encrypted_block)
-        
-        return bytes(encrypted_ciphertext)
+        return cls.encrypt_ecb(plaintext.encode("utf-8"),key)
     
     
     @classmethod
@@ -254,21 +301,8 @@ class KriptogramAES:
         
         if not isinstance(ciphertext_block, (bytes, bytearray)):
             raise TypeError("şifreli veri bytes tipinde olmalı")
-        
-        if not ciphertext_block or len(ciphertext_block) % 16 != 0:
-            raise ValueError("şifreli veri uzunluğu 16'nın katı olmalı")
-        cls.check_key(key)
-        
-        decrypted_plaintext = bytearray()
-        
-        for i in range(0,len(ciphertext_block),16):
-            block = ciphertext_block[i:i+16]
-            decrypted_block = cls.decrypt_block(block,key)
-            decrypted_plaintext.extend(decrypted_block)
-        
-        unpadded_data = cls.unpad(bytes(decrypted_plaintext))
-        return unpadded_data.decode("utf-8")
-    
+        9
+        return cls.decrypt_ecb(ciphertext_block,key).decode("utf-8")
     
         
     

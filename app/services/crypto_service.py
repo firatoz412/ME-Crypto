@@ -21,10 +21,13 @@ class CryptoService:
 
     @staticmethod
     def aes_encrypt(key:bytes,plaintext:str) -> dict:
+        
         if isinstance(plaintext,str):
             plaintext = plaintext.encode('utf-8')
+            
         cipher = AES.new(key,AES.MODE_CBC)
         ciphertext = cipher.encrypt(pad(plaintext,AES.block_size))
+        
         return {
             "iv": base64.b64encode(cipher.iv).decode('utf-8'),
             "ciphertext": base64.b64encode(ciphertext).decode('utf-8'),
@@ -47,30 +50,40 @@ class CryptoService:
         gen_time = (time.perf_counter() - start_time)*1000
         pub_size = len(pub_pem.encode('utf-8'))
         return key,pub_pem,gen_time,pub_size
+    
+    
+    @staticmethod
+    def load_rsa_public_key(pem):
+        return RSA.import_key(pem)
+    
 
     @staticmethod
     def rsa_encrypt_aes_key(public_key,aes_key:bytes) -> bytes:
-        #client:aes anahtarını public key ile şifreler
-        cipher_rsa = PKCS1_OAEP.new(public_key)#şifrele
-        return cipher_rsa.encrypt(aes_key)
+        #client:aes anahtarını sunucunun public key'i ile şifreler
+        return PKCS1_OAEP.new(public_key).encrypt(aes_key)
+        
 
     @staticmethod
     def rsa_decrypt_aes_key(private_key,encrypted_aes_key:bytes) -> bytes:
         #alıcı:gelen şifreli aes anahtarını sadece kendinde bulunana rsa private key'i ile çözer
-        cipher_rsa = PKCS1_OAEP.new(private_key)
-        return cipher_rsa.decrypt(encrypted_aes_key)
+        return PKCS1_OAEP.new(private_key).decrypt(encrypted_aes_key)
 
 
     #DH-2048
-    ##standart sabitler
+    #standart sabitler
     DH_P = int(
         "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1"
         "29024E088A67CC74020BBEA63B139B22514A08798E3404DD"
         "EF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245"
         "E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7ED"
-        "EE386BFB5A899FA5AE9F24117C4B1FE649286651ECE65381"
-        "FFFFFFFFFFFFFFFF", 16
-    )#16'lık tabanda güvenli asal sayı
+        "EE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3D"
+        "C2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F"
+        "83655D23DCA3AD961C62F356208552BB9ED529077096966D"
+        "670C354E4ABC9804F1746C08CA18217C32905E462E36CE3B"
+        "E39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9"
+        "DE2BCBF6955817183995497CEA956AE515D2261898FA0510"
+        "15728E5A8AACAA68FFFFFFFFFFFFFFFF", 16
+    )#16'lık tabanda güvenli asal sayı (2048 bit)
     DH_G = 2#generator
 
     @classmethod#priv, pub_hex, gen_time, pub_size 
@@ -82,9 +95,23 @@ class CryptoService:
         gen_time = (time.perf_counter() - start_time) * 1000
         pub_size = len(pub_hex.encode('utf-8'))
         return private_key,pub_hex,gen_time,pub_size
+    
+    @classmethod
+    def load_dh_public_key(cls,pub_hex:str) -> int:
+        y = int(pub_hex, 16)
+        
+        if not (1 < y < cls.DH_P - 1):
+            raise ValueError("geçersiz DH açık değeri")
+        
+        return y
+    
 
     @classmethod
     def dh_shared_key(cls, private_key: int, public_key: int) -> bytes:
+        
+        if not (1 < public_key < cls.DH_P -1):#zorunlu public key sınırı
+            raise ValueError("geçersiz DH açık değeri")
+        
         shared_secret_int = pow(public_key, private_key, cls.DH_P)
         shared_secret_bytes = shared_secret_int.to_bytes(256, byteorder='big')
         return HKDF(shared_secret_bytes, 16, b'', SHA256)
@@ -94,13 +121,22 @@ class CryptoService:
     #ecc/edhc
     @staticmethod
     def generate_ecc_keypair():
+        
         start_time = time.perf_counter()
         private_key = ECC.generate(curve='P-256')
         public_key  = private_key.public_key()
-        pub_pem = public_key.export_key(format='PEM').decode('utf-8')
+        pub_pem = public_key.export_key(format='PEM')
+            
         gen_time = (time.perf_counter() - start_time)*1000
         pub_size = len(pub_pem.encode('utf-8'))
+        
         return private_key,pub_pem,gen_time,pub_size
+
+
+    @staticmethod
+    def load_ecc_public_key(pem):
+        return ECC.import_key(pem)
+    
 
     @staticmethod
     def ecc_shared_key(private_key,public_key) -> bytes:
@@ -111,7 +147,7 @@ class CryptoService:
 
 
     #kyber
-    @staticmethod#priv, pub_b64, gen_time, pub_size
+    @staticmethod#priv(secret), pub_b64, gen_time, pub_size
     def generate_kyber_keypair():
         start_time = time.perf_counter()
         public_key, private_key = ml_kem_768.keygen()#public,secret
@@ -119,11 +155,24 @@ class CryptoService:
         gen_time = (time.perf_counter() - start_time)*1000
         pub_size = len(pub_b64.encode('utf-8'))
         return private_key,pub_b64,gen_time,pub_size
-
+    
+    
     @staticmethod
-    def kyber_encapsulate(public_key: bytes):
-        return ml_kem_768.encaps(public_key)
+    def kyber_to_aes_key(shared_secret: bytes) -> bytes:
+        return HKDF(shared_secret, 16, b'', SHA256)#ml-kem'in ortak sırrı 32 bayt,aes için 16 bayta indir.
 
-    @staticmethod
-    def kyber_decapsulate(secret_key: bytes, ciphertext: bytes) -> bytes:
-        return ml_kem_768.decaps(secret_key, ciphertext)
+
+    @classmethod
+    def kyber_encapsulate(cls,public_key: bytes):
+        #istemci: (ciphertext, aes_key_16bayt) döner, ciphertext sunucuya gider
+        a, b = ml_kem_768.encaps(public_key)
+        ciphertext, shared_secret = (a, b) if len(a) > len(b) else (b, a)
+        return ciphertext, cls.kyber_to_aes_key(shared_secret)
+
+
+    @classmethod
+    def kyber_decapsulate(cls,secret_key: bytes, ciphertext: bytes) -> bytes:
+        shared_secret = ml_kem_768.decaps(secret_key, ciphertext)
+        return cls.kyber_to_aes_key(shared_secret)
+    
+    
