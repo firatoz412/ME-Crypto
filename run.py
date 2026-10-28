@@ -1,6 +1,9 @@
 import os
 from app import create_app, socketio
 from app.controller.auth_controller import auth_bp
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = create_app()
 

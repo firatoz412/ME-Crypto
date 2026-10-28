@@ -1,4 +1,4 @@
-
+import os
 
 class KriptogramAES:
 
@@ -43,6 +43,9 @@ class KriptogramAES:
     ]
 
     #Rijndael Şifreleme Sabitleri (Galois Field Çarpımları için)
+    #Round Constant = anahtar genişletme fonksiyonunda(expand_key():) g fonksiyonu bölümünde
+    #4 byte'lık dizinin sadece ilk baytı rcon sabitleri ile xorlarnır
+    #örnek = [b0 +RCON[x.ci round],b1,b2,b3]    
     RCON = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36]
 
 
@@ -131,7 +134,7 @@ class KriptogramAES:
         for i in range(4, 44):
             temp = list(key_words[i-1])
             if i % 4 == 0:
-                temp = temp[1:] + temp[:1]  #RotWord = byte'ları 
+                temp = temp[1:] + temp[:1]  #RotWord = byte'ları sola kaydırır [b1,b2,b3,b4] ---rotword--> [b2,b3,b4,b1]
                 temp = [cls.S_BOX[b] for b in temp]  #SubWord = s_box ile yer değiştir.
                 temp[0] ^= cls.RCON[(i // 4) - 1]  # Rcon = ilk byte a xor.
             
@@ -162,22 +165,23 @@ class KriptogramAES:
 
     @classmethod
     def encrypt_block(cls, plaintext_block: bytes, key: bytes,round_keys=None) -> bytes:
+        
         cls.check_block(plaintext_block)
         cls.check_key(key)
-        state = list(plaintext_block)
-        round_keys = cls.expand_key(key)
-    
+        
         if round_keys is None:
             round_keys = cls.expand_key(key)
-        
-        state = cls._add_round_key(state, round_keys[0])
+
+        state = list(plaintext_block)
+        state = cls._add_round_key(state,round_keys[0])
         
         for r in range(1, 10):
             state = cls._sub_bytes(state)
             state = cls.shift_rows(state)
             state = cls.mix_columns(state)
             state = cls._add_round_key(state, round_keys[r])
-            
+        
+        #son adımda round key eklemiyoruz;
         state = cls._sub_bytes(state)
         state = cls.shift_rows(state)
         state = cls._add_round_key(state, round_keys[10])
@@ -188,12 +192,11 @@ class KriptogramAES:
         
         cls.check_block(ciphertext_block)
         cls.check_key(key)
-        state = list(ciphertext_block)
-        round_keys = cls.expand_key(key)
-        
+       
         if round_keys is None:
             round_keys = cls.expand_key(key)
-        
+            
+        state = list(ciphertext_block)
         state = cls._add_round_key(state, round_keys[10])
         state = cls.inv_shift_rows(state)
         state = cls._inv_sub_bytes(state)
@@ -225,7 +228,7 @@ class KriptogramAES:
     def unpad(data:bytes) -> bytes:
         
         if not data or len(data) % 16 != 0:
-            raise ValueError("geçersiz ")
+            raise ValueError("geçersiz veri uzunluğu")
         
         padding_len = data[-1]
         
@@ -246,7 +249,6 @@ class KriptogramAES:
             raise TypeError("data bytes tipinde olmalı")
         
         if iv is None:
-            import os
             iv = os.urandom(16)
             
         cls.check_block(iv)
@@ -293,7 +295,7 @@ class KriptogramAES:
         if not isinstance(plaintext,str):
             raise TypeError("plaintext string tipinde olmalı.")
         
-        return cls.encrypt_ecb(plaintext.encode("utf-8"),key)
+        return cls.encrypt_cbc(plaintext.encode("utf-8"),key)
     
     
     @classmethod
@@ -301,8 +303,8 @@ class KriptogramAES:
         
         if not isinstance(ciphertext_block, (bytes, bytearray)):
             raise TypeError("şifreli veri bytes tipinde olmalı")
-        9
-        return cls.decrypt_ecb(ciphertext_block,key).decode("utf-8")
+        
+        return cls.decrypt_cbc(ciphertext_block,key).decode("utf-8")
     
         
     

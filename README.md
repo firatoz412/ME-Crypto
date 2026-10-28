@@ -51,5 +51,3 @@ Projenin Temel Amacı ve Özellikleri:
       NOT:Sunucu ve istemci aynı ağa bağlı olmlılar.
 
    3.Güvenli veya güvensiz mod seçimini yaparak mesajlaşabilirsiniz.
-
-

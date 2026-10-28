@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(PROJECT_ROOT))
 from app.services.crypto_service import CryptoService
 
-HOST = '0.0.0.0'
+HOST = '172.17.9.163'
 PORT = 5000
 
 clients = {}
@@ -49,10 +49,12 @@ def handle_handshake(conn, packet):
             "type": "HANDSHAKE", "method": method, "step": "SERVER_PUB", "pub_key": pub,
             "metrics": {"gen_time_ms": round(t, 2), "pub_size_bytes": sz}
         }
-        conn.sendall((json.dumps(resp) + "\n").encode('utf-8'))
-
+    
     elif step == "FINALIZE":
+        # HATA DÜZELTME 1: method'u state'ten alıyoruz
+        method = state.get("method")
         payload = packet.get("payload")
+        
         if method == "RSA":
             clients[conn]["aes_key"] = CryptoService.rsa_decrypt_aes_key(state["priv"], payload)
         elif method == "ECC":
@@ -60,14 +62,16 @@ def handle_handshake(conn, packet):
         elif method == "DH":
             clients[conn]["aes_key"] = CryptoService.dh_shared_key(state["priv"], payload)
         elif method == "KYBER":
-            clients[conn]["aes_key"] = CryptoService.kyber_decaps(state["priv"], payload)
+            # HATA DÜZELTME 2: Doğru fonksiyon adı 'kyber_decapsulate' kullanıldı
+            clients[conn]["aes_key"] = CryptoService.kyber_decapsulate(state["priv"], payload)
 
         total_t = (time.perf_counter() - state.get("t_start", time.perf_counter())) * 1000
         resp = {
             "type": "HANDSHAKE_OK", "method": method,
             "metrics": {"handshake_time_ms": round(total_t, 2), "incoming_bytes": len(str(payload))}
         }
-        conn.sendall((json.dumps(resp) + "\n").encode('utf-8'))
+        
+    conn.sendall((json.dumps(resp) + "\n").encode('utf-8'))
 
 def handle_client(conn, addr):
     client_id = f"Client_{addr[1]}"

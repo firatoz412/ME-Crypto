@@ -1,0 +1,11 @@
+import mysql.connector as msqlc
+import os
+
+def getDatabase():
+    return msqlc.connect(
+        host=os.getenv("DB_HOST"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+        database=os.getenv("DB_NAME")
+        
+    )

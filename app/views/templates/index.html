@@ -14,7 +14,7 @@
 </head>
 <body>
 <!-- GİRİŞ & KAYIT MODALI -->
-<div id="login-modal" class="modal-overlay" style="display: flex;">
+<div id="login-modal" class="modal-overlay" style="display: flex;"> <!-- login eklendikten sonra display:none yapılacak-->
     <div class="modal-card">
         <div class="modal-header">
             <i class="fa-solid fa-shield-halved"></i>
@@ -148,6 +148,11 @@
                         <i class="fa-solid fa-trash-can"></i>
                     </button>
                 </div>
+
+                <div class="logout" id="logout" >
+                    <button style="color: white;background-color: #38bdf8; border:solid 2px red;" type="button" onclick="logoutUser()"> Çıkış Yap</button>
+                </div>
+                
             </header>
 
             <div class="messages-container" id="messages-container">
@@ -174,7 +179,21 @@
         </main>
     </div>
 
+
+    <script type="importmap">
+        {
+        "imports": {
+            "mlkem": "https://esm.sh/mlkem@2.7.0"
+        }
+        }
+    </script>
     <!-- Uygulama Scripti -->
-    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+     <script type="module" src="{{ url_for('static', filename='js/cipher.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/basic.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/login.js') }}"></script>
+    
+
+    
+
 </body>
 </html>
