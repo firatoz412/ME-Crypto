@@ -13,33 +13,6 @@ from pqcrypto.kem import ml_kem_768
 
 
 class CryptoService:
-
-    #AES
-    @staticmethod
-    def generate_aes_key() -> bytes:
-        return os.urandom(16)#16 byte (128 bit) rastgele anahtar üret
-
-    @staticmethod
-    def aes_encrypt(key:bytes,plaintext:str) -> dict:
-        
-        if isinstance(plaintext,str):
-            plaintext = plaintext.encode('utf-8')
-            
-        cipher = AES.new(key,AES.MODE_CBC)
-        ciphertext = cipher.encrypt(pad(plaintext,AES.block_size))
-        
-        return {
-            "iv": base64.b64encode(cipher.iv).decode('utf-8'),
-            "ciphertext": base64.b64encode(ciphertext).decode('utf-8'),
-            "raw": cipher.iv + ciphertext
-        }
-
-    @staticmethod
-    def aes_decrypt(key:bytes,encrypted_payload:bytes) -> bytes:
-        iv_degeri = encrypted_payload[:16]#payload = iv(16 byte) + chipertext ilk 16 bytelık kısım...
-        ciphertext = encrypted_payload[16:]
-        cipher = AES.new(key,AES.MODE_CBC,iv=iv_degeri)
-        return unpad(cipher.decrypt(ciphertext),AES.block_size)#veriyi çöz
         
     #RSA-2048
     @staticmethod

@@ -1,9 +1,13 @@
 from app.config.database import getDatabase as vt
 from flask import render_template, Blueprint, request,session
 from flask_socketio import emit,join_room
+
 from app import socketio
 from app.services.crypto_service import CryptoService
+from app.services.manual_crypto_service import ManualCryptoService
+
 import time
+import traceback
 import os,base64
 
 main_bp = Blueprint('main', __name__)
@@ -269,12 +273,11 @@ def handle_message(data):
             t0 = time.perf_counter()
             
             # AES Çözme işlemi
-            plain_text = CryptoService.aes_decrypt(client_info["aes_key"], raw).decode("utf-8")
+            plain_text = ManualCryptoService.decrypt_message(raw,client_info["aes_key"])
             dec_ms = (time.perf_counter() - t0) * 1000
             
         except Exception as e:
             print(f"[KRİTİK HATA] Sunucu mesajı çözerken patladı: {str(e)}")
-            import traceback
             traceback.print_exc()
             emit('system_error', {"message": f"Sunucu tarafında mesaj çözülemedi: {str(e)}"}, to=sid)
             return
@@ -290,16 +293,16 @@ def handle_message(data):
                 print(f"[DEBUG] Hedef client ({other.get('id')}) güvenli değil, atlanıyor.")
                 continue
                 
-            enc = CryptoService.aes_encrypt(other["aes_key"], plain_text)
+            enc = ManualCryptoService.encrypt_message(plain_text,other["aes_key"])
             socketio.emit('receive_message', {
                 "sender": sender_id,
                 "mode": "ENCRYPTED",
-                "ciphertext": base64.b64encode(enc["raw"]).decode("utf-8"),
-                "cipher_preview": enc["ciphertext"][:20] + "..."
+                "ciphertext": base64.b64encode(enc).decode("utf-8"),
+                "cipher_preview": base64.b64encode(enc[16:]).decode("utf-8")[:20] + "..."
             }, to=other_sid)
             target_count += 1
             
-        print(f"[✓] Mesaj {target_count} kişiye başarıyla şifrelenip iletildi.")
+        print(f"[==>] Mesaj {target_count} kişiye başarıyla şifrelenip iletildi.")
 
     print("="*50)
     
